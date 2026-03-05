@@ -1,8 +1,9 @@
-# Lab: Windows Server 2022 Domain Controller Setup
+# Lab 08.01 — Virtualization Setup (DC01 + CLIENT01)
 
 ## Goal
 
-Deploy a Windows Server 2022 virtual machine and configure it as a Domain Controller for an Active Directory lab environment used for technical support practice.
+Build a virtual lab environment using VirtualBox to simulate a corporate network.
+This lab prepares the environment for practicing Active Directory, DNS, login troubleshooting, and remote support scenarios.
 
 ---
 
@@ -10,81 +11,118 @@ Deploy a Windows Server 2022 virtual machine and configure it as a Domain Contro
 
 | Component         | Details                    |
 | ----------------- | -------------------------- |
-| Hypervisor        | VirtualBox                 |
+| Host System       | Personal Laptop            |
+| Hypervisor        | Oracle VirtualBox          |
+| Extension Pack    | Installed                  |
 | Server VM         | Windows Server 2022 (DC01) |
 | Client VM         | Windows 10/11 (CLIENT01)   |
-| Network Type      | NAT + Host-Only            |
-| Host-Only Network | 192.168.56.0/24            |
+| Network Design    | NAT + Host-Only            |
+| Host-Only Network | 192.168.56.1/24            |
 
 ---
 
-# Network Configuration
+# Network Design
 
-| System   | Role              | IP Address    | Adapter   |
-| -------- | ----------------- | ------------- | --------- |
-| DC01     | Domain Controller | 192.168.56.10 | Host-Only |
-| CLIENT01 | Domain Client     | 192.168.56.20 | Host-Only |
+Two network adapters were configured for each VM.
 
-Adapter configuration:
+### Adapter 1 — NAT
 
-Adapter 1 → NAT (Internet Access)
-Adapter 2 → Host-Only Adapter (Lab Network)
+Purpose:
 
----
+* Provides internet access to the virtual machines
+* Allows updates and software downloads
 
-# Setup Steps
+### Adapter 2 — Host-Only
 
-### 1. Create Virtual Machines
+Purpose:
 
-Created two virtual machines in VirtualBox:
+* Creates a private internal network
+* Allows DC01 and CLIENT01 to communicate like a corporate LAN
 
-• DC01 (Windows Server 2022)
-• CLIENT01 (Windows 10)
-
-Both machines were connected to:
+Host-only network configuration:
 
 ```
-Adapter 1 → NAT
-Adapter 2 → Host-Only (vboxnet0)
+Network: 192.168.56.1/24
 ```
 
 ---
 
-### 2. Configure Static IP on Domain Controller
+# Virtual Machines
 
-On **DC01**:
+## DC01 (Domain Controller Server)
+
+| Setting | Value               |
+| ------- | ------------------- |
+| OS      | Windows Server 2022 |
+| RAM     | 8 GB                |
+| CPU     | 2–4 cores           |
+| Disk    | 60–80 GB            |
+| Network | NAT + Host-Only     |
+
+---
+
+## CLIENT01 (Domain Client)
+
+| Setting | Value                   |
+| ------- | ----------------------- |
+| OS      | Windows 10 / Windows 11 |
+| RAM     | 4–8 GB                  |
+| CPU     | 2 cores                 |
+| Disk    | 50–80 GB                |
+| Network | NAT + Host-Only         |
+
+---
+
+# IP Configuration
+
+Static IP addresses were configured on the Host-Only network.
+
+| System   | Role        | IP Address    | Subnet Mask   | DNS           |
+| -------- | ----------- | ------------- | ------------- | ------------- |
+| DC01     | Server      | 192.168.56.10 | 255.255.255.0 | 127.0.0.1     |
+| CLIENT01 | Workstation | 192.168.56.20 | 255.255.255.0 | 192.168.56.10 |
+
+This DNS configuration allows the client to locate the domain controller once Active Directory is installed.
+
+---
+
+# Connectivity Testing
+
+Connectivity between the virtual machines was tested using the `ping` command.
+
+### Test from CLIENT01
 
 ```
-IP Address: 192.168.56.10
-Subnet Mask: 255.255.255.0
-DNS Server: 192.168.56.10
+ping 192.168.56.10
+```
+
+### Test from DC01
+
+```
+ping 192.168.56.20
+```
+
+Successful responses confirmed that both virtual machines were communicating correctly on the Host-Only network.
+
+Example output:
+
+```
+Reply from 192.168.56.10: bytes=32 time<1ms TTL=128
 ```
 
 ---
 
-### 3. Configure Client Networking
-
-On **CLIENT01**:
-
-```
-IP Address: 192.168.56.20
-Subnet Mask: 255.255.255.0
-DNS Server: 192.168.56.10
-```
-
----
-
-# Issue Encountered — VM Connectivity (Ping Failure)
+# Issue Encountered — Ping Failure
 
 ## Description
 
-During initial connectivity testing, **DC01 and CLIENT01 were unable to communicate using ping** even though both systems were configured on the same Host-Only network (`192.168.56.0/24`).
-
-Both machines had valid static IP addresses and were connected to the same VirtualBox Host-Only adapter (`vboxnet0`). However, ping requests resulted in:
+During the initial connectivity test, ping requests between DC01 and CLIENT01 failed with the following result:
 
 ```
 Request timed out
 ```
+
+Both virtual machines were connected to the same Host-Only network and had correct static IP addresses.
 
 ---
 
@@ -92,74 +130,42 @@ Request timed out
 
 The following troubleshooting steps were performed:
 
-### Step 1 — Verify Network Configuration
-
-Checked IP configuration on both machines.
-
-Command used:
+1. Verified IP configuration using:
 
 ```
 ipconfig
 ```
 
-Both systems displayed correct IP addresses.
+2. Confirmed both machines were connected to the same VirtualBox Host-Only adapter (`vboxnet0`).
 
----
-
-### Step 2 — Verify Network Adapter Status
-
-Command used:
-
-```
-ipconfig /all
-```
-
-Confirmed both VMs were connected to **Host-Only adapter vboxnet0**.
-
----
-
-### Step 3 — Test Connectivity
-
-Attempted ping tests.
+3. Re-tested connectivity using:
 
 ```
 ping 192.168.56.10
 ping 192.168.56.20
 ```
 
-Result:
-
-```
-Request timed out
-```
-
----
-
-### Step 4 — Firewall Testing
-
-Temporarily disabled Windows Defender Firewall.
-
-Command used:
+4. Temporarily disabled Windows Defender Firewall for testing:
 
 ```
 netsh advfirewall set allprofiles state off
 ```
 
-After disabling the firewall, ping tests succeeded.
+After disabling the firewall, ping requests succeeded.
 
 ---
 
 # Root Cause
 
-Windows Defender Firewall was **blocking ICMP Echo Requests (ping)**.
+Windows Defender Firewall was blocking **ICMP Echo Requests (ping)** by default.
 
-By default, Windows blocks incoming ICMP traffic to prevent unauthorized network discovery.
+This security feature prevents unauthorized network scanning and device discovery.
 
 ---
 
 # Resolution
 
-Instead of leaving the firewall disabled, the proper solution was to **enable the inbound ICMP firewall rule**.
+Instead of leaving the firewall disabled, the correct solution was to enable the inbound ICMP rule.
 
 Steps performed:
 
@@ -173,13 +179,13 @@ File and Printer Sharing (Echo Request - ICMPv4-In)
 
 4. Enable the rule.
 
+This allows ping traffic while keeping the firewall enabled.
+
 ---
 
 # Verification
 
-Connectivity tests were repeated.
-
-Command:
+Connectivity tests were repeated after enabling the ICMP rule.
 
 ```
 ping 192.168.56.10
@@ -191,15 +197,7 @@ Result:
 Reply from 192.168.56.10: bytes=32 time<1ms TTL=128
 ```
 
-Both **DC01 and CLIENT01** were able to communicate successfully.
-
----
-
-# Lessons Learned
-
-• Windows Firewall can block diagnostic tools such as ping
-• Firewall rules should be adjusted instead of disabling security
-• Connectivity testing should always be performed before configuring services such as Active Directory
+Both virtual machines were able to communicate successfully.
 
 ---
 
@@ -211,9 +209,39 @@ Screenshots stored in:
 evidence/screenshots/
 ```
 
-Example screenshots:
+Examples:
 
-• VM network configuration
-• Ping failure output
-• Firewall rule configuration
-• Successful ping response
+* VirtualBox Host-Only network configuration
+* DC01 system information
+* CLIENT01 system information
+* Ping failure output
+* Firewall rule configuration
+* Successful ping results
+
+---
+
+# Skills Demonstrated
+
+* Virtual machine deployment
+* Virtual network configuration
+* Static IP configuration
+* Network troubleshooting
+* Firewall rule investigation
+* Command-line diagnostics
+
+---
+
+# Next Lab
+
+Next step in the lab environment:
+
+```
+08-Virtualization-VMs/02-domain-join-client
+```
+
+In the next lab:
+
+* Install **Active Directory Domain Services**
+* Promote DC01 to **Domain Controller**
+* Create a domain (example: `supportlab.local`)
+* Join CLIENT01 to the domain
